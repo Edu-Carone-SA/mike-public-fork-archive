@@ -248,6 +248,12 @@ export default function ProjectAssistantChatPage({ params }: Props) {
     const [reloadingDocIds, setReloadingDocIds] = useState<Set<string>>(
         () => new Set(),
     );
+    // Edit status overrides keyed by edit_id — set when a resolve
+    // (accept/reject, single or bulk) succeeds so EditCards flip to
+    // Accepted/Rejected immediately instead of staying "pending".
+    const [resolvedEditStatuses, setResolvedEditStatuses] = useState<
+        Record<string, "accepted" | "rejected">
+    >({});
 
     const activeTab = tabs.find((t) => t.documentId === activeTabId) ?? null;
     const tabBarRef = useRef<HTMLDivElement | null>(null);
@@ -605,18 +611,49 @@ export default function ProjectAssistantChatPage({ params }: Props) {
         });
     };
 
-    const handleEditResolved = (_args: {
+    const handleEditResolved = (args: {
         editId: string;
         documentId: string;
         status: "accepted" | "rejected";
         versionId: string | null;
         downloadUrl: string | null;
     }) => {
-        // Re-render after accept/reject is disabled while we verify the
-        // client-side optimistic mutation works on its own. Re-enable by
-        // bumping versionId + refetchKey on the matching tab and marking
-        // it reloading like before.
-        void _args;
+        // Record the outcome so every EditCard for this edit flips to
+        // Accepted/Rejected immediately (single click or bulk loop).
+        setResolvedEditStatuses((prev) => ({
+            ...prev,
+            [args.editId]: args.status,
+        }));
+        // Accept/reject overwrites the bytes of the document's current
+        // version in place, so bump the tab's refetchKey to make DocxView
+        // drop its cached bytes and refetch the resolved docx.
+        setTabs((prev) =>
+            prev.map((t) =>
+                t.documentId === args.documentId
+                    ? { ...t, refetchKey: (t.refetchKey ?? 0) + 1 }
+                    : t,
+            ),
+        );
+        setReloadingDocIds((prev) => {
+            if (!prev.has(args.documentId)) return prev;
+            const next = new Set(prev);
+            next.delete(args.documentId);
+            return next;
+        });
+    };
+
+    const handleEditResolveStart = (args: {
+        editId: string;
+        documentId: string;
+    }) => {
+        // Mark the document as reloading while a resolve is in flight so
+        // the panel buttons disable and don't race a second resolve.
+        setReloadingDocIds((prev) => {
+            if (prev.has(args.documentId)) return prev;
+            const next = new Set(prev);
+            next.add(args.documentId);
+            return next;
+        });
     };
 
     const patchTab = (documentId: string, patch: Partial<DocTab>) => {
@@ -1344,7 +1381,13 @@ export default function ProjectAssistantChatPage({ params }: Props) {
                                                 handleEditViewClick
                                             }
                                             onOpenDocument={handleOpenDocument}
+                                            onEditResolveStart={
+                                                handleEditResolveStart
+                                            }
                                             onEditResolved={handleEditResolved}
+                                            resolvedEditStatuses={
+                                                resolvedEditStatuses
+                                            }
                                             onEditError={handleEditError}
                                             isDocReloading={(docId) =>
                                                 reloadingDocIds.has(docId)
