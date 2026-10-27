@@ -44,6 +44,7 @@ import { PdfView } from "@/app/components/shared/views/PdfView";
 import { SpreadsheetView } from "@/app/components/shared/views/SpreadsheetView";
 import { OwnerOnlyPopup } from "@/app/components/popups/OwnerOnlyPopup";
 import { DocxView } from "@/app/components/shared/views/DocxView";
+import { invalidateDocxBytes } from "@/app/hooks/useFetchDocxBytes";
 import { MikeIcon } from "@/app/components/chat/mike-icon";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { useUserProfile } from "@/app/contexts/UserProfileContext";
@@ -387,6 +388,40 @@ export default function ProjectAssistantChatPage({ params }: Props) {
             .catch(() => {});
     }, [projectMutationSignature, projectId]);
 
+    // QA BUG-3 (F1): when an edit_document completes, the tab showing that
+    // document must move to the new version — otherwise the viewer keeps
+    // rendering the previous version and the redlines only appear after
+    // the user clicks "View" on an edit card. Track the latest version_id
+    // per edited document and bump any open tab that is still on an older
+    // version; DocxView refetches the new bytes (cacheKey includes the
+    // version) and renders the tracked changes inline.
+    const editedVersionByDoc = useMemo(() => {
+        const map: Record<string, string | null> = {};
+        for (const msg of messages) {
+            for (const ev of msg.events ?? []) {
+                if ("isStreaming" in ev && ev.isStreaming) continue;
+                if (ev.type !== "doc_edited") continue;
+                if (!ev.document_id) continue;
+                map[ev.document_id] = ev.version_id ?? null;
+            }
+        }
+        return map;
+    }, [messages]);
+
+    useEffect(() => {
+        setTabs((prev) => {
+            let changed = false;
+            const next = prev.map((t) => {
+                const target = editedVersionByDoc[t.documentId];
+                if (target === undefined) return t;
+                if ((t.versionId ?? null) === (target ?? null)) return t;
+                changed = true;
+                return { ...t, versionId: target ?? undefined };
+            });
+            return changed ? next : prev;
+        });
+    }, [editedVersionByDoc]);
+
     useEffect(() => {
         setCurrentChatId(chatId);
     }, [chatId, setCurrentChatId]);
@@ -626,7 +661,11 @@ export default function ProjectAssistantChatPage({ params }: Props) {
         }));
         // Accept/reject overwrites the bytes of the document's current
         // version in place, so bump the tab's refetchKey to make DocxView
-        // drop its cached bytes and refetch the resolved docx.
+        // drop its cached bytes and refetch the resolved docx. Also drop
+        // the module-level cache for this document — with the viewer
+        // closed there is no tab to bump, and reopening would otherwise
+        // serve the stale marked-up bytes until a full reload (QA F10).
+        invalidateDocxBytes(args.documentId);
         setTabs((prev) =>
             prev.map((t) =>
                 t.documentId === args.documentId
