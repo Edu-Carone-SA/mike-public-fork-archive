@@ -20,6 +20,10 @@ import type { Chat, Message } from "@/app/components/shared/types";
 
 interface ChatHistoryContextType {
     chats: Chat[] | null;
+    /** True when the last chats load FAILED (e.g. 429/5xx) — the sidebar
+     * shows an error state instead of a misleading "No chats yet". */
+    chatsError: boolean;
+    retryLoadChats: () => void;
     hasMoreChats: boolean;
     currentChatId: string | null;
     setCurrentChatId: (chatId: string | null) => void;
@@ -47,6 +51,8 @@ const CHAT_LIMIT_INCREMENT = 10;
 export function ChatHistoryProvider({ children }: { children: ReactNode }) {
     const { user } = useAuth();
     const [chats, setChats] = useState<Chat[] | null>(null);
+    const [chatsError, setChatsError] = useState(false);
+    const [retryNonce, setRetryNonce] = useState(0);
     const [chatLimit, setChatLimit] = useState(INITIAL_CHAT_LIMIT);
     const [hasMoreChats, setHasMoreChats] = useState(false);
     const [currentChatId, setCurrentChatId] = useState<string | null>(null);
@@ -65,11 +71,20 @@ export function ChatHistoryProvider({ children }: { children: ReactNode }) {
             const data = await listChats({ limit: chatLimit + 1 });
             setChats(data.slice(0, chatLimit));
             setHasMoreChats(data.length > chatLimit);
+            setChatsError(false);
         } catch {
-            setChats([]);
+            // QA RL-1 (26/10/2026): keep whatever was loaded before (or
+            // null) and flag the failure — rendering "No chats yet" during
+            // a rate-limit outage made users think their data was gone.
+            setChats((prev) => prev ?? []);
             setHasMoreChats(false);
+            setChatsError(true);
         }
     }, [chatLimit, user]);
+
+    const retryLoadChats = useCallback(() => {
+        setRetryNonce((n) => n + 1);
+    }, []);
 
     useEffect(() => {
         if (!user) {
@@ -82,7 +97,7 @@ export function ChatHistoryProvider({ children }: { children: ReactNode }) {
         }
 
         void loadChats();
-    }, [user, loadChats]);
+    }, [user, loadChats, retryNonce]);
 
     const loadMoreChats = useCallback(() => {
         setChatLimit((prev) => prev + CHAT_LIMIT_INCREMENT);
@@ -178,6 +193,8 @@ export function ChatHistoryProvider({ children }: { children: ReactNode }) {
             loadMoreChats,
             saveChat,
             renameChat: renameChatFn,
+            chatsError,
+            retryLoadChats,
             newChatMessages,
             setNewChatMessages,
             replaceChatId,
@@ -185,6 +202,8 @@ export function ChatHistoryProvider({ children }: { children: ReactNode }) {
         }),
         [
             chats,
+            chatsError,
+            retryLoadChats,
             hasMoreChats,
             currentChatId,
             loadChats,

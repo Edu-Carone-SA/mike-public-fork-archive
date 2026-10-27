@@ -609,9 +609,15 @@ export async function generateDocx(
 
 export function safeGeneratedFilename(title: string, extension: string) {
   const rawTitle = typeof title === "string" ? title : "document";
+  // QA OBS-4 (26/10/2026): the ASCII-only whitelist silently dropped
+  // diacritics ("Cláusulas" → "Clusulas") and underscores. Normalize to
+  // NFD and strip combining marks first so accented characters survive
+  // as their base letters, and keep underscores as word separators.
   const safeTitle =
     rawTitle
-      .replace(/[^a-zA-Z0-9 -]/g, "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9 _-]/g, "")
       .trim()
       .slice(0, 64) || "document";
   return `${safeTitle}.${extension}`;

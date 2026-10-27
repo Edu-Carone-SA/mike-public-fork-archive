@@ -41,7 +41,7 @@ interface AppSidebarProps {
 export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
     const { user } = useAuth();
     const { profile } = useUserProfile();
-    const { chats, hasMoreChats, loadMoreChats, setCurrentChatId } =
+    const { chats, hasMoreChats, loadMoreChats, setCurrentChatId, chatsError, retryLoadChats } =
         useChatHistoryContext();
     const router = useRouter();
     const pathname = usePathname();
@@ -90,10 +90,13 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
         return () => clearTimeout(timer);
     }, [searchQuery]);
 
+    const [projectsError, setProjectsError] = useState(false);
+
     useEffect(() => {
         if (!user) return;
         listProjects()
             .then((projects) => {
+                setProjectsError(false);
                 const map: Record<string, string> = {};
                 for (const p of projects) map[p.id] = p.name;
                 setProjectNames(map);
@@ -108,8 +111,12 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                 );
             })
             .catch(() => {
+                // QA RL-1 (26/10/2026): flag the failure instead of
+                // rendering a misleading "No projects yet" during a
+                // rate-limit/5xx outage.
                 setProjectNames({});
-                setRecentProjects([]);
+                setRecentProjects((prev) => prev ?? []);
+                setProjectsError(true);
             });
     }, [user]);
 
@@ -395,15 +402,27 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                                             ))}
                                         </div>
                                     ) : recentProjects.length === 0 ? (
-                                        <div
-                                            className={`px-5 py-2 text-xs text-gray-500 ${
-                                                shouldAnimate
-                                                    ? "sidebar-fade-in-2"
-                                                    : ""
-                                            }`}
-                                        >
-                                            No projects yet
-                                        </div>
+                                        projectsError ? (
+                                            <div className="px-5 py-2 text-xs text-red-600">
+                                                Couldn&#39;t load projects.
+                                                <button
+                                                    onClick={() => window.location.reload()}
+                                                    className="ml-1 underline underline-offset-2 hover:text-red-700"
+                                                >
+                                                    Retry
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div
+                                                className={`px-5 py-2 text-xs text-gray-500 ${
+                                                    shouldAnimate
+                                                        ? "sidebar-fade-in-2"
+                                                        : ""
+                                                }`}
+                                            >
+                                                No projects yet
+                                            </div>
+                                        )
                                     ) : (
                                         <div
                                             className={`space-y-1 px-2.5 ${
@@ -487,15 +506,27 @@ export function AppSidebar({ isOpen, onToggle }: AppSidebarProps) {
                                         ))}
                                     </div>
                                 ) : chats.length === 0 ? (
-                                    <div
-                                        className={`text-xs text-gray-500 py-2 px-5 ${
-                                            shouldAnimate
-                                                ? "sidebar-fade-in-2"
-                                                : ""
-                                        }`}
-                                    >
-                                        No chats yet
-                                    </div>
+                                    chatsError ? (
+                                        <div className="text-xs text-red-600 py-2 px-5">
+                                            Couldn&#39;t load chats.
+                                            <button
+                                                onClick={retryLoadChats}
+                                                className="ml-1 underline underline-offset-2 hover:text-red-700"
+                                            >
+                                                Retry
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div
+                                            className={`text-xs text-gray-500 py-2 px-5 ${
+                                                shouldAnimate
+                                                    ? "sidebar-fade-in-2"
+                                                    : ""
+                                            }`}
+                                        >
+                                            No chats yet
+                                        </div>
+                                    )
                                 ) : (
                                     <>
                                         <div
