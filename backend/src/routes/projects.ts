@@ -26,6 +26,7 @@ import { deleteUserProjects } from "../lib/userDataCleanup";
 import {
   ALLOWED_DOCUMENT_TYPES,
   ALLOWED_DOCUMENT_TYPES_LABEL,
+  validateDocumentMagicBytes,
   contentTypeForDocumentType,
   shouldConvertToPdf,
 } from "../lib/documentTypes";
@@ -937,6 +938,13 @@ export async function handleDocumentUpload(
       .json({
         detail: `Unsupported file type: ${suffix}. Allowed: ${ALLOWED_DOCUMENT_TYPES_LABEL}`,
       });
+  // QA BUG-1 (26/10/2026): reject content that does not match the declared
+  // type (e.g. a 34-byte text file renamed to .pdf) at upload time instead
+  // of surfacing the failure later when the assistant tries to read it.
+  const magicProblem = validateDocumentMagicBytes(suffix, file.buffer);
+  if (magicProblem) {
+    return void res.status(400).json({ detail: magicProblem });
+  }
 
   const content = file.buffer;
 
