@@ -17,6 +17,7 @@ import {
     invalidateDirectoryCache,
 } from "../modals/AddDocumentsModal";
 import { uploadStandaloneDocument } from "@/app/lib/mikeApi";
+import { formatUploadErrorMessage } from "@/app/lib/uploadErrorMessages";
 import {
     SUPPORTED_DOCUMENT_ACCEPT,
     formatUnsupportedDocumentWarning,
@@ -148,6 +149,9 @@ export function AskInputPopup({
             addDocs(inputId, uploaded);
         } catch (err) {
             console.error("Document upload failed:", err);
+            // QA BUG-1 follow-up: surface backend rejections (renamed/
+            // corrupt file) instead of failing silently.
+            setUploadWarning(formatUploadErrorMessage(err, supported[0]?.name));
         } finally {
             setUploadingInputId(null);
             setDragActiveInputId(null);

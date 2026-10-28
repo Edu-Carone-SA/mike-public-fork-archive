@@ -31,6 +31,7 @@ import {
     renameDocumentVersion,
     type DocumentVersion,
 } from "@/app/lib/mikeApi";
+import { formatUploadErrorMessage } from "@/app/lib/uploadErrorMessages";
 import type {
     Document,
     Folder as ProjectFolder,
@@ -1085,6 +1086,9 @@ export function ProjectDocumentsView({ projectId }: Props) {
             handleDocsSelected(uploaded);
         } catch (err) {
             console.error("Project document drop upload failed", err);
+            // QA BUG-1 follow-up: surface backend rejections (renamed/
+            // corrupt file) instead of failing silently.
+            setDocumentUploadWarning(formatUploadErrorMessage(err, supported[0]?.name));
         } finally {
             setUploadingDroppedFilenames([]);
         }

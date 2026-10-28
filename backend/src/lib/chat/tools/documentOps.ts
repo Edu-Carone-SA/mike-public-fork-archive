@@ -529,12 +529,11 @@ export async function generateDocx(
     }
 
     const docId = crypto.randomUUID().replace(/-/g, "");
-    const safeTitle =
-      title
-        .replace(/[^a-zA-Z0-9 -]/g, "")
-        .trim()
-        .slice(0, 64) || "document";
-    const filename = `${safeTitle}.docx`;
+    // QA OBS-4 (27/10/2026): reuse the shared sanitizer so generated
+    // filenames keep accented base letters (NFD + combining-mark strip)
+    // and underscores — the inline whitelist here silently turned
+    // "Cláusulas Típicas" into "Clusulas Tpicas".
+    const filename = safeGeneratedFilename(title, "docx");
     const key = generatedDocKey(userId, docId, filename);
 
     await uploadFile(
