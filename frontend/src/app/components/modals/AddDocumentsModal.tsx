@@ -7,6 +7,7 @@ import {
     uploadProjectDocument,
     addDocumentToProject,
 } from "@/app/lib/mikeApi";
+import { formatUploadErrorMessage } from "@/app/lib/uploadErrorMessages";
 import type { Document } from "../shared/types";
 import { FileDirectory } from "../shared/FileDirectory";
 import {
@@ -77,6 +78,9 @@ export function AddDocumentsModal({
                 );
             } catch (err) {
                 console.error("Upload failed:", err);
+                // QA BUG-1 follow-up: surface backend rejections (e.g.
+                // renamed/corrupt file) instead of failing silently.
+                setUploadWarning(formatUploadErrorMessage(err, supported[0]?.name));
             } finally {
                 setUploading(false);
                 setUploadingFilenames([]);

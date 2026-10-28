@@ -24,3 +24,15 @@ describe("safeGeneratedFilename (QA OBS-4)", () => {
     expect(safeGeneratedFilename("###", "pdf")).toBe("document.pdf");
   });
 });
+
+// QA reteste 27/10: generateDocx path had a SECOND inline whitelist that
+// still stripped diacritics; it now reuses safeGeneratedFilename. Guard
+// the exact repro from the field ("Cláusulas Típicas Prestação de
+// Serviços" → previously "Clusulas Tpicas Prestao de Servios").
+describe("safeGeneratedFilename — reteste repro (generateDocx path)", () => {
+  it("keeps accented base letters on the exact QA repro title", () => {
+    expect(
+      safeGeneratedFilename("Cláusulas Típicas Prestação de Serviços", "docx"),
+    ).toBe("Clausulas Tipicas Prestacao de Servicos.docx");
+  });
+});

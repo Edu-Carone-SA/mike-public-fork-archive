@@ -9,13 +9,13 @@ import {
     useImperativeHandle,
 } from "react";
 import {
+    AlertCircle,
     ArrowRight,
     Check,
     FolderOpen,
     Library,
     Square,
-    X,
-} from "lucide-react";
+    X,} from "lucide-react";
 import { AddDocButton } from "./AddDocButton";
 import { FileTypeIcon } from "../shared/FileTypeIcon";
 import { AddDocumentsModal } from "../modals/AddDocumentsModal";
@@ -35,6 +35,7 @@ import {
     uploadStandaloneDocument,
     uploadProjectDocument,
 } from "@/app/lib/mikeApi";
+import { formatUploadErrorMessage } from "@/app/lib/uploadErrorMessages";
 import { useFileDropZone } from "@/app/hooks/useFileDropZone";
 import { DropZoneOverlay } from "../shared/DropZoneOverlay";
 
@@ -81,6 +82,7 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
     const controlsRef = useRef<HTMLDivElement>(null);
     const [compactControls, setCompactControls] = useState(false);
     const [docSelectorOpen, setDocSelectorOpen] = useState(false);
+    const [uploadWarning, setUploadWarning] = useState<string | null>(null);
     const [workflowModalOpen, setWorkflowModalOpen] = useState(false);
     const [apiKeyModalProvider, setApiKeyModalProvider] =
         useState<ModelProvider | null>(null);
@@ -106,6 +108,10 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
                 });
             } catch (err) {
                 console.error("Upload failed:", err);
+                // QA BUG-1 follow-up: show backend rejections (renamed/
+                // corrupt file) instead of failing silently.
+                setUploadWarning(formatUploadErrorMessage(err, files[0]?.name));
+                setTimeout(() => setUploadWarning(null), 10_000);
             } finally {
                 setUploading(false);
             }
@@ -204,6 +210,23 @@ export const ChatInput = forwardRef<ChatInputHandle, Props>(function ChatInput(
         <>
             <div className="relative w-full" {...dropHandlers}>
                 <DropZoneOverlay isDragOver={isDragOver} />
+                {uploadWarning && (
+                    <div
+                        role="alert"
+                        className="mb-1.5 flex items-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-gray-900"
+                    >
+                        <AlertCircle className="h-3.5 w-3.5 shrink-0 text-red-600" />
+                        <span className="min-w-0 flex-1">{uploadWarning}</span>
+                        <button
+                            type="button"
+                            onClick={() => setUploadWarning(null)}
+                            className="shrink-0 rounded p-0.5 text-black hover:bg-gray-100"
+                            aria-label="Dismiss upload warning"
+                        >
+                            <X className="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+                )}
             <div className="rounded-[18px] border border-white/65 bg-white/60 shadow-[0_4px_10px_rgba(15,23,42,0.12),inset_0_1px_0_rgba(255,255,255,0.85),inset_0_-6px_14px_rgba(255,255,255,0.18)] backdrop-blur-2xl md:rounded-[22px]">
                     {/* Attached chips */}
                     {(selectedWorkflow || attachedDocs.length > 0) && (
